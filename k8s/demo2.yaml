@@ -1,0 +1,113 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: rulin
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: demo2-configmap
+  namespace: rulin
+data:
+  application.properties: |
+    env=local
+    msg=demo-mrl:8080/test1
+  # mysql.properteis: |
+  #   mysql.hostname=10.10.10.10
+  #   mysql.port=3333  
+  DEPLOYMENT_ENV: prod
+  MICOR_SERVICE_NAME: demo-mrl:8080/test1
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: demo2-mrl
+  namespace: rulin
+  labels:
+    app: demo2-mrl
+spec:
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: demo2-mrl
+  template:
+    metadata:
+      labels:
+        app: demo2-mrl
+    spec:
+      containers:
+      - name: demo2
+        image: rulinmarulin/my-demo2
+        command: ["java","-Dmsg=$(MICOR_SERVICE_NAME)" ,"-Dspring.redis.host=redis","-jar","/app.jar"]
+        # imagePullPolicy: IfNotPresent
+        # args: ["--spring.config.location=application.properties,mysql.properties"]
+        args: ["--spring.profiles.active=$(DEPLOYMENT_ENV_KEY)"]
+        ports:
+        - containerPort: 8080
+        env:
+          - name: DEPLOYMENT_ENV_KEY
+            valueFrom:
+              configMapKeyRef:
+                name: demo2-configmap
+                key: DEPLOYMENT_ENV
+          - name: MICOR_SERVICE_NAME
+            valueFrom:
+              configMapKeyRef:
+                name: demo2-configmap
+                key: MICOR_SERVICE_NAME
+          - name: USERNAME
+            valueFrom:
+              secretKeyRef:
+                name: mysecret
+                key: username
+          - name: PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: mysecret
+                key: password
+        volumeMounts:
+        - name: demo2-config
+          mountPath: /config
+          # subPath: application.properties
+        # - name: demo-config
+        #   mountPath: /opt/mysql.properties 
+        #   subPath: mysql.properties   
+      volumes:
+      - name: demo2-config
+        configMap:
+          name: demo2-configmap
+          items:
+            - key: application.properties
+              path: application.properties 
+            # - key: mysql.properties
+            #   path: mysql.properties  
+         # env:
+  
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: demo2-mrl
+  namespace: rulin
+  labels:
+    app: demo2-mrl
+spec:
+  type: NodePort 
+  ports:
+    - protocol: TCP
+      port: 8080
+      targetPort: 8080
+      nodePort: 32124
+  selector:
+    app: demo2-mrl
+---
+#apiVersion: v1
+#kind: Secret
+#metadata:
+#  name: mysecret
+#  namespace: rulin
+#type: Opaque
+#data:
+#  username: YWRtaW4=
+#  password: YWRtaW4zMjE=

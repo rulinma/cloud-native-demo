@@ -1,0 +1,107 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: rulin
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: demo-configmap
+  namespace: rulin
+data:
+  application.properties: |
+    env=local
+    msg=this is local env properteis.
+  # mysql.properteis: |
+  #   mysql.hostname=10.10.10.10
+  #   mysql.port=3333  
+  DEPLOYMENT_ENV: prod
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: demo-mrl
+  namespace: rulin
+  labels:
+    app: demo-mrl
+spec:
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: demo-mrl
+  template:
+    metadata:
+      labels:
+        app: demo-mrl
+    spec:
+      containers:
+      - name: demo
+        image: rulinmarulin/my-test2 
+        command: ["java","-Dmsg=$(PASSWORD) -Dspring.redis.host=redis","-jar","/app.jar"]
+        # imagePullPolicy: IfNotPresent
+        # args: ["--spring.config.location=application.properties,mysql.properties"]
+        args: ["--spring.profiles.active=$(DEPLOYMENT_ENV_KEY)"]
+        ports:
+        - containerPort: 8080
+        env:
+          - name: DEPLOYMENT_ENV_KEY
+            valueFrom:
+              configMapKeyRef:
+                name: demo-configmap
+                key: DEPLOYMENT_ENV
+          - name: USERNAME
+            valueFrom:
+              secretKeyRef:
+                name: mysecret
+                key: username
+          - name: PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: mysecret
+                key: password
+        volumeMounts:
+        - name: demo-config
+          mountPath: /config
+          # subPath: application.properties
+        # - name: demo-config
+        #   mountPath: /opt/mysql.properties 
+        #   subPath: mysql.properties   
+      volumes:
+      - name: demo-config
+        configMap:
+          name: demo-configmap
+          items:
+            - key: application.properties
+              path: application.properties 
+            # - key: mysql.properties
+            #   path: mysql.properties  
+         # env:
+  
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: demo-mrl
+  namespace: rulin
+  labels:
+    app: demo-mrl
+spec:
+  type: NodePort 
+  ports:
+    - protocol: TCP
+      port: 8080
+      targetPort: 8080
+      nodePort: 32123
+  selector:
+    app: demo-mrl     
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mysecret
+  namespace: rulin
+type: Opaque
+data:
+  username: YWRtaW4=
+  password: YWRtaW4zMjE=
